@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>مساعدي الذكي</title>
+<style>
+:root{--bg:#131314;--side:#1e1f20;--hover:#2a2b2c;--border:#3c4043;--text:#e3e3e3;--muted:#9aa0a6;--accent:#8ab4f8;--user:#1f3a5f}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Tahoma,Arial,sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;overflow:hidden}
+#sidebar{width:250px;background:var(--side);padding:12px 8px;flex-shrink:0;display:flex;flex-direction:column;gap:4px;overflow-y:auto}
+.btn{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:24px;cursor:pointer;font-size:14px;border:none;background:transparent;color:var(--text);width:100%;text-align:right}
+.btn:hover{background:var(--hover)}
+#newChat{background:var(--hover);border:1px solid var(--border);margin-bottom:10px}
+.lbl{font-size:12px;color:var(--muted);padding:14px 12px 6px;display:flex;justify-content:space-between;align-items:center}
+.lbl span{cursor:pointer;font-size:16px}
+#main{flex:1;display:flex;flex-direction:column;min-width:0}
+#content-area{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.section-view{flex:1;padding:30px;overflow-y:auto;display:none}
+.section-view h2{margin-bottom:15px;color:var(--accent)}
+#chat{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:14px}
+.msg{max-width:70%;padding:12px 16px;border-radius:16px;white-space:pre-wrap;font-size:15px;animation:up .2s}
+@keyframes up{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.user{align-self:flex-end;background:var(--user)}
+.bot{align-self:flex-start;background:var(--hover)}
+#bar{display:flex;gap:8px;padding:14px 20px 20px;align-items:center}
+#txt{flex:1;padding:12px 16px;border-radius:24px;border:1px solid var(--border);background:var(--side);color:var(--text);font-size:15px;outline:none}
+#send, #mic{background:var(--accent);border:none;color:#131314;font-weight:700;padding:0 16px;height:45px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px}
+#send{border-radius:24px;padding:0 20px}
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <button class="btn" id="newChatBtn">➕ محادثة جديدة</button>
+  <button class="btn" onclick="switchView('chat')">💬 الدردشة</button>
+  <button class="btn" onclick="switchView('search')">🔍 البحث في المحادثات</button>
+  <button class="btn" onclick="switchView('images')">🖼️ الصور</button>
+  <button class="btn" onclick="switchView('videos')">🎬 الفيديوهات</button>
+  <button class="btn" onclick="switchView('library')">📚 المكتبة</button>
+  <div class="lbl">دفاتر الملاحظات <span onclick="addNotebook()">➕</span></div>
+  <div id="notebooks-list"></div>
+  <div class="lbl">المحادثات السابقة</div>
+  <div id="history-list"></div>
+</div>
+
+<div id="main">
+  <div id="content-area">
+    <div id="chat-section" class="section-view" style="display:flex; flex-direction:column; height:100%;">
+      <div id="chat"></div>
+    </div>
+    <div id="search-section" class="section-view">
+      <h2>البحث في المحادثات</h2>
+      <p style="color:var(--muted)">ابحث في سجلك ومحادثاتك السابقة بسهولة...</p>
+    </div>
+    <div id="images-section" class="section-view">
+      <h2>قسم الصور</h2>
+      <p style="color:var(--muted)">استعرض وولد الصور الجديدة من هنا.</p>
+    </div>
+    <div id="videos-section" class="section-view">
+      <h2>قسم الفيديوهات</h2>
+      <p style="color:var(--muted)">إدارة وتشغيل الفيديوهات والوسائط الخاصة بك.</p>
+    </div>
+    <div id="library-section" class="section-view">
+      <h2>المكتبة</h2>
+      <p style="color:var(--muted)">ملفاتك ومستنداتك المحفوظة تظهر هنا.</p>
+    </div>
+  </div>
+
+  <div id="bar">
+    <button id="mic" title="التسجيل الصوتي">🎙️</button>
+    <input id="txt" placeholder="اكتب رسالتك..." autofocus>
+    <button id="send">إرسال</button>
+  </div>
+</div>
+
+<script>
+const chat = document.getElementById('chat');
+const txt = document.getElementById('txt');
+
+function switchView(viewName) {
+  const sections = ['chat-section', 'search-section', 'images-section', 'videos-section', 'library-section'];
+  sections.forEach(sec => document.getElementById(sec).style.display = 'none');
+  
+  if(viewName === 'chat') {
+    document.getElementById('chat-section').style.display = 'flex';
+  } else {
+    document.getElementById(viewName + '-section').style.display = 'block';
+  }
+}
+
+function add(text, who){
+  const d = document.createElement('div');
+  d.className = 'msg ' + who;
+  d.textContent = text;
+  chat.appendChild(d);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function reply(msg){
+  msg = msg.trim();
+  if(!msg) return "اكتب حاجة الأول 🙂";
+  if(msg.includes('اسمك')) return "أنا مساعدك الشخصي، اتعملت خصيصاً ليك.";
+  return "استلمت رسالتك: \"" + msg + "\". (الواجهة شغالة معاك مية في المية).";
+}
+
+function send(){
+  const v = txt.value;
+  if(!v.trim()) return;
+  add(v, 'user');
+  txt.value = '';
+  switchView('chat');
+  setTimeout(()=> add(reply(v), 'bot'), 300);
+}
+
+function addNotebook() {
+  const name = prompt("اسم دفتر الملاحظات الجديد:");
+  if(name) {
+    const list = document.getElementById('notebooks-list');
+    const item = document.createElement('div');
+    item.className = 'btn';
+    item.style.fontSize = '13px';
+    item.style.padding = '6px 12px';
+    item.textContent = '📔 ' + name;
+    item.onclick = () => switchView('chat');
+    list.appendChild(item);
+  }
+}
+
+document.getElementById('send').onclick = send;
+document.getElementById('mic').onclick = () => alert("جارٍ تفعيل الميكروفون...");
+txt.addEventListener('keydown', e => { if(e.key === 'Enter') send(); });
+document.getElementById('newChatBtn').onclick = () => { chat.innerHTML = ''; switchView('chat'); };
+</script>
+
+</body>
+</html>
