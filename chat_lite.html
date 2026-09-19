@@ -164,6 +164,8 @@
   </main>
 
   <script>
+    const OLLAMA_URL = 'http://localhost:11434/api/generate';
+    const MODEL = 'llama3';
     const form = document.getElementById('chat-form');
     const input = document.getElementById('input');
     const messages = document.getElementById('messages');
@@ -177,6 +179,7 @@
       message.textContent = text;
       messages.appendChild(message);
       messages.scrollTop = messages.scrollHeight;
+      return message;
     }
 
     function resizeInput() {
@@ -184,7 +187,14 @@
       input.style.height = `${Math.min(input.scrollHeight, 130)}px`;
     }
 
+    function setLoading(isLoading) {
+      send.disabled = isLoading;
+      input.disabled = isLoading;
+      send.textContent = isLoading ? 'جاري...' : 'إرسال';
+    }
+
     input.addEventListener('input', resizeInput);
+
     input.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' && !event.shiftKey) {
         event.preventDefault();
@@ -192,22 +202,47 @@
       }
     });
 
-    form.addEventListener('submit', (event) => {
+    form.addEventListener('submit', async (event) => {
       event.preventDefault();
-      const text = input.value.trim();
-      if (!text) return;
+      const prompt = input.value.trim();
+      if (!prompt || send.disabled) return;
 
-      addMessage(text, 'user');
+      addMessage(prompt, 'user');
       input.value = '';
       resizeInput();
-      send.disabled = true;
+      setLoading(true);
 
-      // رد تجريبي محلي؛ اربط هنا API الخاص بك لاحقاً.
-      setTimeout(() => {
-        addMessage('وصلت رسالتك ✅\nهذه نسخة تجريبية من Chat Lite.', 'bot');
-        send.disabled = false;
+      try {
+        const response = await fetch(OLLAMA_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: MODEL,
+            prompt,
+            stream: false
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`فشل الطلب (${response.status})`);
+        }
+
+        const data = await response.json();
+        if (typeof data.response !== 'string' || !data.response.trim()) {
+          throw new Error('لم يُرجع Ollama نصاً صالحاً');
+        }
+
+        addMessage(data.response.trim(), 'bot');
+      } catch (error) {
+        console.error('Ollama request failed:', error);
+        addMessage(
+          `تعذر الاتصال بـ Ollama. تأكد من تشغيله وأن النموذج ${MODEL} مثبت.\n\nالتفاصيل: ${error.message}`,
+          'bot'
+        );
+      } finally {
+        setLoading(false);
         input.focus();
-      }, 450);
+      }
     });
   </script>
 </body>
