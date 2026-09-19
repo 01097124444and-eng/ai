@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Chat Lite</title>
+  <title>Chat Lite - Ollama</title>
   <style>
     :root {
       color-scheme: dark;
@@ -14,6 +14,7 @@
       --muted: #94a3b8;
       --accent: #22c55e;
       --user: #2563eb;
+      --error: #ef4444;
     }
 
     * { box-sizing: border-box; }
@@ -91,6 +92,14 @@
       border-bottom-left-radius: 5px;
     }
 
+    .message.error {
+      align-self: flex-start;
+      color: #fecaca;
+      background: rgba(127, 29, 29, .65);
+      border: 1px solid var(--error);
+      border-bottom-right-radius: 5px;
+    }
+
     .empty {
       margin: auto;
       text-align: center;
@@ -149,7 +158,7 @@
       <span class="status" aria-hidden="true"></span>
       <div>
         <h1>Chat Lite</h1>
-        <p class="subtitle">محادثة تجريبية خفيفة وسريعة</p>
+        <p class="subtitle">اتصال مباشر بـ Ollama — نموذج llama3</p>
       </div>
     </header>
 
@@ -164,9 +173,12 @@
   </main>
 
   <script>
+    'use strict';
+
     const OLLAMA_URL = 'http://localhost:11434/api/generate';
     const MODEL = 'llama3';
     const REQUEST_TIMEOUT_MS = 120000;
+
     const form = document.getElementById('chat-form');
     const input = document.getElementById('input');
     const messages = document.getElementById('messages');
@@ -193,6 +205,16 @@
       send.textContent = isLoading ? 'جاري...' : 'إرسال';
     }
 
+    function connectionError(error) {
+      const details = error?.message || String(error);
+      const isGitHubPages = window.location.protocol === 'https:';
+      const prefix = isGitHubPages
+        ? 'الصفحة تعمل عبر HTTPS، والمتصفح يمنعها من الاتصال بـ HTTP المحلي (Mixed Content). افتح الصفحة محلياً عبر HTTP أو استخدم Backend وسيطاً يعمل عبر HTTPS.'
+        : 'تعذر الوصول إلى Ollama. تأكد من تشغيل ollama serve وأن المنفذ 11434 متاح.';
+
+      return `${prefix}\n\nإذا كان الخطأ CORS، شغّل Ollama مع السماح لأصل الصفحة عبر OLLAMA_ORIGINS.\n\nالتفاصيل: ${details}`;
+    }
+
     async function requestOllama(prompt) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -214,31 +236,36 @@
 
         const rawBody = await response.text();
         let data;
+
         try {
           data = rawBody ? JSON.parse(rawBody) : null;
         } catch {
-          throw new Error('استجابة Ollama ليست JSON صالحاً');
+          throw new Error('استجابة Ollama ليست JSON صالحاً.');
         }
 
         if (!response.ok) {
-          const reason = data?.error || `HTTP ${response.status}`;
-          throw new Error(`فشل طلب Ollama: ${reason}`);
+          throw new Error(data?.error || `HTTP ${response.status}`);
         }
 
-        if (typeof data?.response !== 'string' || !data.response.trim()) {
-          throw new Error('لم تُرجع Ollama قيمة response نصية');
+        if (typeof data?.response !== 'string') {
+          throw new Error('استجابة Ollama لا تحتوي على response نصية.');
         }
 
-        return data.response.trim();
+        const answer = data.response.trim();
+        if (!answer) {
+          throw new Error('أعاد Ollama رداً فارغاً.');
+        }
+
+        return answer;
       } catch (error) {
         if (error.name === 'AbortError') {
-          throw new Error('انتهت مهلة الاتصال بـ Ollama بعد دقيقتين');
+          throw new Error('انتهت مهلة الاتصال بـ Ollama بعد دقيقتين.');
         }
+
         if (error instanceof TypeError) {
-          throw new Error(
-            'تعذر الوصول إلى Ollama. شغّل Ollama وتأكد من السماح بالمصدر عبر OLLAMA_ORIGINS.'
-          );
+          throw new Error('فشل طلب الشبكة أو CORS.');
         }
+
         throw error;
       } finally {
         clearTimeout(timeout);
@@ -269,7 +296,7 @@
         addMessage(answer, 'bot');
       } catch (error) {
         console.error('Ollama request failed:', error);
-        addMessage(`تعذر الحصول على رد من Ollama.\n\n${error.message}`, 'bot');
+        addMessage(connectionError(error), 'error');
       } finally {
         setLoading(false);
         input.focus();
