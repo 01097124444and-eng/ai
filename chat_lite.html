@@ -166,14 +166,14 @@
   <script>
     const OLLAMA_URL = 'http://localhost:11434/api/generate';
     const MODEL = 'llama3';
+    const REQUEST_TIMEOUT_MS = 120000;
     const form = document.getElementById('chat-form');
     const input = document.getElementById('input');
     const messages = document.getElementById('messages');
     const send = document.getElementById('send');
-    const empty = document.getElementById('empty');
 
     function addMessage(text, type) {
-      empty?.remove();
+      document.getElementById('empty')?.remove();
       const message = document.createElement('div');
       message.className = `message ${type}`;
       message.textContent = text;
@@ -191,6 +191,58 @@
       send.disabled = isLoading;
       input.disabled = isLoading;
       send.textContent = isLoading ? 'جاري...' : 'إرسال';
+    }
+
+    async function requestOllama(prompt) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+      try {
+        const response = await fetch(OLLAMA_URL, {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: MODEL,
+            prompt,
+            stream: false
+          }),
+          signal: controller.signal
+        });
+
+        const rawBody = await response.text();
+        let data;
+        try {
+          data = rawBody ? JSON.parse(rawBody) : null;
+        } catch {
+          throw new Error('استجابة Ollama ليست JSON صالحاً');
+        }
+
+        if (!response.ok) {
+          const reason = data?.error || `HTTP ${response.status}`;
+          throw new Error(`فشل طلب Ollama: ${reason}`);
+        }
+
+        if (typeof data?.response !== 'string' || !data.response.trim()) {
+          throw new Error('لم تُرجع Ollama قيمة response نصية');
+        }
+
+        return data.response.trim();
+      } catch (error) {
+        if (error.name === 'AbortError') {
+          throw new Error('انتهت مهلة الاتصال بـ Ollama بعد دقيقتين');
+        }
+        if (error instanceof TypeError) {
+          throw new Error(
+            'تعذر الوصول إلى Ollama. شغّل Ollama وتأكد من السماح بالمصدر عبر OLLAMA_ORIGINS.'
+          );
+        }
+        throw error;
+      } finally {
+        clearTimeout(timeout);
+      }
     }
 
     input.addEventListener('input', resizeInput);
@@ -213,32 +265,11 @@
       setLoading(true);
 
       try {
-        const response = await fetch(OLLAMA_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: MODEL,
-            prompt,
-            stream: false
-          })
-        });
-
-        if (!response.ok) {
-          throw new Error(`فشل الطلب (${response.status})`);
-        }
-
-        const data = await response.json();
-        if (typeof data.response !== 'string' || !data.response.trim()) {
-          throw new Error('لم يُرجع Ollama نصاً صالحاً');
-        }
-
-        addMessage(data.response.trim(), 'bot');
+        const answer = await requestOllama(prompt);
+        addMessage(answer, 'bot');
       } catch (error) {
         console.error('Ollama request failed:', error);
-        addMessage(
-          `تعذر الاتصال بـ Ollama. تأكد من تشغيله وأن النموذج ${MODEL} مثبت.\n\nالتفاصيل: ${error.message}`,
-          'bot'
-        );
+        addMessage(`تعذر الحصول على رد من Ollama.\n\n${error.message}`, 'bot');
       } finally {
         setLoading(false);
         input.focus();
